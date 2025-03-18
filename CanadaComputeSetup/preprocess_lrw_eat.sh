@@ -25,13 +25,34 @@ pip install --no-index wheelhouse/*.whl
 # export CMAKE_BUILD_PARALLEL_LEVEL=1
 # pip install wheelhouse/* --no-index --no-cache-dir -vvv && echo 'Done installing local dependencies'
 
+cd ..
+
 # Extract mp4 files from test set
-tar -xvf lrw-v1.tar -C "EAT_code/preprocess/video" */test/*.mp4
+EXTRACT=false
+while getopts "x" opt; do
+  case ${opt} in
+    e )
+      EXTRACT=true
+      ;;
+    * )
+      echo "Usage: $0 [-x] to extract from lrw-v1.tar"
+      exit 1
+      ;;
+  esac
+done
+
+if [ "$EXTRACT" = true ]; then
+        mkdir preprocess/video # make directory in case it doesn't exist yet
+        tar --wildcards -xvf lrw-v1.tar -C "EAT_code/preprocess/video" */test/*.mp4
+        find EAT_code/preprocess/video/lipread_mp4 -type f -path '*/test/*.mp4' -exec mv {} EAT_code/preprocess/video \;
+        rm -r EAT_code/preprocess/video/lipread_mp4
+fi
 
 # Preprocess videos
 cd EAT_code/preprocess
 echo "Starting preprocessing..."
-python preprocess.py
+python preprocess_video.py
 echo "Done preprocessing. Moving files to correct directories..."
-mkdir ../lrw
+mkdir -p ../lrw/lrw_images ../lrw/lrw_latent ../lrw/lrw_df32 ../lrw/poseimg ../lrw/lrw_Wavs
+
 mv imgs/* ../lrw/lrw_images && mv latents/* ../lrw/lrw_latent && mv deepfeature32/* ../lrw/lrw_df32 && mv poseimg/* ../lrw/poseimg && mv video_fps25/*.wav ../lrw/lrw_wavs

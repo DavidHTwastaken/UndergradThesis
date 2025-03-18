@@ -1,0 +1,9 @@
+video/*
+cropped/*
+deepfeature32/*
+imgs/*
+latents/*
+lmk_fps25/*
+poseimg/*
+video_fps25/*
+raw_videos/*

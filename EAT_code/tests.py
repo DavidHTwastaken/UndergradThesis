@@ -4,6 +4,7 @@ import torch
 import imageio
 import numpy as np
 import os
+from ..Audio2Head.modules.audio2pose import get_pose_from_audio
 
 emo_label = ['ang',  'con',  'dis',  'fea',  'hap',  'neu',  'sad',  'sur']
 emo_label_full = ['angry',  'contempt',  'disgusted',

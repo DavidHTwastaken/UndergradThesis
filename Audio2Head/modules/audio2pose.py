@@ -32,9 +32,7 @@ class audio2poseLSTM(nn.Module):
 
 def get_pose_from_audio(img,audio,model_path):
     num_frame = len(audio) // 4
-    # Defining minv and maxv for normalization
-    # minv = np.array([-0.639, -0.501, -0.47, -102.6, -32.5, 184.6], dtype=np.float32)
-    # maxv = np.array([0.411, 0.547, 0.433, 159.1, 116.5, 376.5], dtype=np.float32)
+    # Changed minv and maxv to match the values in EAT_code
     minv = np.array([0, 0, 0, -1, -1, -1], dtype=np.float32)
     maxv = np.array([65, 65, 65, 1, 1, 1], dtype=np.float32)
 
@@ -56,12 +54,12 @@ def get_pose_from_audio(img,audio,model_path):
     x["audio"] = audio
     poses = generator(x)
 
-    print('audio2poseLSTM output: ', poses.shape)
+    # print('audio2poseLSTM output: ', poses.shape)
     poses = poses.cpu().data.numpy()[0]
 
     # Simple min-max scaling
     # poses = (poses+1)/2*(maxv-minv)+minv
-    print('rotations: ',poses[:,:3])
+    # print('rotations: ',poses[:,:3])
     poses = (poses+1)/2*(maxv-minv)+minv
     rot,trans =  poses[:,:3].copy(),poses[:,3:].copy()
     return rot,trans

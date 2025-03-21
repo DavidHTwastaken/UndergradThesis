@@ -4,6 +4,8 @@
 #SBATCH --time=0-06:00:00   # DD-HH:MM:SS
 #SBATCH --gres=gpu:1
 
+PWD=$(pwd)
+
 cd EAT_code
 
 module load StdEnv/2020
@@ -52,7 +54,8 @@ fi
 cd EAT_code/preprocess
 echo "Starting preprocessing..."
 python preprocess_video.py
-echo "Done preprocessing. Moving files to correct directories..."
-mkdir -p ../lrw/lrw_images ../lrw/lrw_latent ../lrw/lrw_df32 ../lrw/poseimg ../lrw/lrw_Wavs
+echo "Done preprocessing."
 
-mv imgs/* ../lrw/lrw_images && mv latents/* ../lrw/lrw_latent && mv deepfeature32/* ../lrw/lrw_df32 && mv poseimg/* ../lrw/poseimg && mv video_fps25/*.wav ../lrw/lrw_wavs
+cd "$PWD"
+
+source move_pre.sh

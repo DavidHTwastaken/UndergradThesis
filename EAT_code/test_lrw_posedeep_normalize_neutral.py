@@ -43,7 +43,7 @@ expU = torch.from_numpy(np.load('./expPCAnorm_fin/U_mead.npy')[:,:32])
 expmean = torch.from_numpy(np.load('./expPCAnorm_fin/mean_mead.npy'))
 
 root_lrw = './lrw'
-
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # def normalize_kp(kp_source, kp_driving, kp_driving_initial,
 #                  use_relative_movement=True, use_relative_jacobian=True):
 
@@ -107,7 +107,7 @@ def prepare_test_data(img_path, audio_path, opt):
     # isp = img_path.split('/')
     he_source = {}
     for k in source_latent[1].keys():
-        he_source[k] = torch.from_numpy(source_latent[1][k][0]).unsqueeze(0).cuda()
+        he_source[k] = torch.from_numpy(source_latent[1][k][0]).unsqueeze(0).to(DEVICE)
     
     # source images
     source_img = img_as_float32(io.imread(img_path)).transpose((2, 0, 1))
@@ -178,7 +178,7 @@ def prepare_test_data(img_path, audio_path, opt):
     return audio_frames, poseimgs, deep_feature, source_img, he_source, he_driving, num_frames,  y_trg, z_trg, latent_path_driving
 
 def load_ckpt(ckpt, kp_detector, generator, audio2kptransformer):
-    checkpoint = torch.load(ckpt)
+    checkpoint = torch.load(ckpt, map_location=DEVICE)
     if audio2kptransformer is not None:
         audio2kptransformer.load_state_dict(checkpoint['audio2kptransformer'])
     if generator is not None:
@@ -215,10 +215,14 @@ def test_lrw(ckpt, part=0, save_dir=" "):
     loss_pca_emos = []
     loss_y = []
     
-    t = len(all_wavs2)//4 + 1
-    all_wavs2 = all_wavs2[t*part: t*(part+1)]
+    # if part == -1:
+    #     # all files
+    #     t = len(all_wavs2)
+    # else:
+    #     t = len(all_wavs2)//4 + 1
+    # t = len(all_wavs2)
+    # all_wavs2 = all_wavs2[t*part: t*(part+1)]
     
-
     for ind in tqdm(range(len(all_wavs2))):
         audio_path = all_wavs2[ind]
         name_a = os.path.basename(audio_path)[:-4]
@@ -229,21 +233,21 @@ def test_lrw(ckpt, part=0, save_dir=" "):
 
 
         with torch.no_grad():
-            source_img = torch.from_numpy(source_img).unsqueeze(0).cuda()
+            source_img = torch.from_numpy(source_img).unsqueeze(0).to(DEVICE)
             kp_canonical = kp_detector(source_img, with_feature=True)     # {'value': value, 'jacobian': jacobian}   
             kp_cano = kp_canonical['value']
 
             x = {}
-            # x['pho'] = ph_frames.unsqueeze(0).cuda()
-            x['mel'] = audio_frames.unsqueeze(1).unsqueeze(0).cuda()
-            x['z_trg'] = z_trg.unsqueeze(0).cuda()
-            x['y_trg'] = torch.tensor(y_trg, dtype=torch.long).cuda().reshape(1)
-            x['pose'] = poseimgs.cuda()
-            x['deep'] = deep_feature.cuda().unsqueeze(0)
-            x['he_driving'] = {'yaw': torch.from_numpy(he_driving['yaw']).cuda().unsqueeze(0), 
-                            'pitch': torch.from_numpy(he_driving['pitch']).cuda().unsqueeze(0), 
-                            'roll': torch.from_numpy(he_driving['roll']).cuda().unsqueeze(0), 
-                            't': torch.from_numpy(he_driving['t']).cuda().unsqueeze(0), 
+            # x['pho'] = ph_frames.unsqueeze(0).to(DEVICE)
+            x['mel'] = audio_frames.unsqueeze(1).unsqueeze(0).to(DEVICE)
+            x['z_trg'] = z_trg.unsqueeze(0).to(DEVICE)
+            x['y_trg'] = torch.tensor(y_trg, dtype=torch.long).to(DEVICE).reshape(1)
+            x['pose'] = poseimgs.to(DEVICE)
+            x['deep'] = deep_feature.to(DEVICE).unsqueeze(0)
+            x['he_driving'] = {'yaw': torch.from_numpy(he_driving['yaw']).to(DEVICE).unsqueeze(0), 
+                            'pitch': torch.from_numpy(he_driving['pitch']).to(DEVICE).unsqueeze(0), 
+                            'roll': torch.from_numpy(he_driving['roll']).to(DEVICE).unsqueeze(0), 
+                            't': torch.from_numpy(he_driving['t']).to(DEVICE).unsqueeze(0), 
                             }
             ### emotion prompt
             emoprompt, deepprompt = emotionprompt(x)
@@ -251,7 +255,8 @@ def test_lrw(ckpt, part=0, save_dir=" "):
             he_driving_emo, input_st = audio2kptransformer(x, kp_canonical, emoprompt=emoprompt, deepprompt=deepprompt, side=True)           # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
             emo_exps = sidetuning(input_st, emoprompt, deepprompt).reshape(-1, 45)     
             exp = he_driving_emo['emo']
-            device = exp.get_device()
+            # changed from exp.get_device()
+            device = exp.device
             exp = torch.mm(exp, expU.t().to(device))
             exp = exp + expmean.expand_as(exp).to(device)
 
@@ -261,13 +266,13 @@ def test_lrw(ckpt, part=0, save_dir=" "):
             exp = exp * source_area
 
             # print(he_driving['yaw'].shape) # len 66
-            he_new_driving = {'yaw': torch.from_numpy(he_driving['yaw']).cuda(), 
-                            'pitch': torch.from_numpy(he_driving['pitch']).cuda(), 
-                            'roll': torch.from_numpy(he_driving['roll']).cuda(), 
-                            't': torch.from_numpy(he_driving['t']).cuda(), 
-                            #   'exp': torch.from_numpy(he_driving['exp']).cuda()}
+            he_new_driving = {'yaw': torch.from_numpy(he_driving['yaw']).to(DEVICE), 
+                            'pitch': torch.from_numpy(he_driving['pitch']).to(DEVICE), 
+                            'roll': torch.from_numpy(he_driving['roll']).to(DEVICE), 
+                            't': torch.from_numpy(he_driving['t']).to(DEVICE), 
+                            #   'exp': torch.from_numpy(he_driving['exp']).to(DEVICE)}
                             'exp': exp}
-            he_driving['exp'] = torch.from_numpy(he_driving['exp']).cuda()
+            he_driving['exp'] = torch.from_numpy(he_driving['exp']).to(DEVICE)
             # print(he_new_driving['exp'][:, 0])
             loss_latent = F.mse_loss(he_new_driving['exp'], he_driving['exp'])
             pca_exp = torch.mm(he_driving['exp'].squeeze(0)/source_area - expmean.expand_as(he_driving['exp'].squeeze(0)).to(device), expU.to(device))
@@ -313,39 +318,35 @@ def test_lrw(ckpt, part=0, save_dir=" "):
         # kwargs = {'duration': 1. / 25.0}
         video_path = os.path.join(log_dir, "temp", f_name)
         # print("save video to: ", video_path)
-        imageio.mimsave(video_path, predictions_gen, fps=25.0)
+        # imageio.mimsave(video_path, predictions_gen, fps=25.0)
 
         # audio_path = os.path.join(audio_dir, x['name'][0].replace(".mp4", ".wav"))
         save_video = os.path.join(log_dir, f_name)
-        cmd = r'ffmpeg -loglevel error -y -i "%s" -i "%s" -vcodec copy "%s"' % (video_path, audio_path, save_video)
-        os.system(cmd)
-        os.remove(video_path)
-    
+        # cmd = r'ffmpeg -loglevel error -y -i "%s" -i "%s" -vcodec copy "%s"' % (video_path, audio_path, save_video)
+        # os.system(cmd)
+        # os.remove(video_path)
+    print(loss_latents)
+    print(loss_pca_emos)
+    print(loss_y)
     print('mean loss_latents', np.mean(loss_latents))
     print('mean loss_pca_emos', np.mean(loss_pca_emos))
     print('mean loss_y ', np.mean(loss_y))
-    if part == 0:
-        with open(f'{save_dir}/loss.txt', 'w') as f:
-            f.write(f'Part 0: mean loss_latents {np.mean(loss_latents)}\n')
-            f.write(f'Part 0: mean loss_pca_emos {np.mean(loss_pca_emos)}\n')
-            f.write(f'Part 0: mean loss_y {np.mean(loss_y)}\n')
-    else:
-        with open(f'{save_dir}/loss.txt', 'a') as f:
-            f.write(f'Part {part}: mean loss_latents {np.mean(loss_latents)}\n')
-            f.write(f'Part {part}: mean loss_pca_emos {np.mean(loss_pca_emos)}\n')
-            f.write(f'Part {part}: mean loss_y {np.mean(loss_y)}\n')
-
-
-
+    # if directory does not exist, create it
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+    with open(os.path.join(save_dir, 'loss.txt'), 'w') as f:
+        f.write(f'Part {part}: mean loss_latents {np.mean(loss_latents)}\n')
+        f.write(f'Part {part}: mean loss_pca_emos {np.mean(loss_pca_emos)}\n')
+        f.write(f'Part {part}: mean loss_y {np.mean(loss_y)}\n')
 
 
 if __name__ == '__main__':
     argparser = argparse.ArgumentParser()
-    argparser.add_argument("--save_dir", type=str, default=" ", help="path of the output video")
+    argparser.add_argument("--save_dir", type=str, default=None, help="path of the output video")
     argparser.add_argument("--part", default=0, type=int, help="part wavs")
     argparser.add_argument("--name", type=str, default=" ", help="path of the output video")
     argparser.add_argument("--mode", type=int, default=0, help="test mode 0: a ckpt 1: a ckpt file")
-    argparser.add_argument("--root_lrw", type=str, default="/data2/gy/lrw", help="path of lrw")
+    argparser.add_argument("--root_lrw", type=str, default="lrw", help="path of lrw")
     args = argparser.parse_args()
 
     # name = 'vt2mel25_2_vox_head_587'
@@ -359,7 +360,11 @@ if __name__ == '__main__':
         name = args.name
         print(name)
     if args.mode == 0:
-        test_lrw(f'./ckpt/{name}.pth.tar', args.part, save_dir=f'./result_lrw/{name}_lrw_norm/')
+        if args.save_dir is not None:
+            save_dir = args.save_dir
+        else:
+            save_dir = f'./result_lrw/{name}_lrw_norm/'
+        test_lrw(f'./ckpt/{name}.pth.tar', args.part, save_dir=save_dir)
     elif args.mode == 1:
         ckpt_paths = glob.glob(f'../ost/output/{name}/*.pth.tar')
         ckpt_paths.sort()

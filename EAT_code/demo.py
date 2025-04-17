@@ -94,7 +94,7 @@ def build_model(config, device_ids=[0]):
     return generator, kp_detector, audio2kptransformer, sidetuning, emotionprompt
 
 
-def prepare_test_data(img_path, audio_path, opt, emotype, use_otherimg=True):
+def prepare_test_data(img_path, audio_path, opt, emotype, use_otherimg=True, a2h=False):
     # sr,_ = wavfile.read(audio_path)
 
     if use_otherimg:
@@ -116,11 +116,21 @@ def prepare_test_data(img_path, audio_path, opt, emotype, use_otherimg=True):
     
     # driving latent
     latent_path_driving = f'{root_wav}/latent_evp_25/{asp}.npy'
-    pose_gz = gzip.GzipFile(f'{root_wav}/poseimg/{asp}.npy.gz', 'r')
-    poseimg = np.load(pose_gz)
+    print(np.load(gzip.GzipFile(
+        f'{root_wav}/a2h_poseimg/{asp}.npy.gz', 'r')))
+    print(np.load(gzip.GzipFile(f'{root_wav}/poseimg/{asp}.npy.gz', 'r')))
+    if a2h:
+        poseimg = np.load(gzip.GzipFile(
+            f'{root_wav}/a2h_poseimg/{asp}.npy.gz', 'r'))
+    else:
+        pose_gz = gzip.GzipFile(f'{root_wav}/poseimg/{asp}.npy.gz', 'r')
+        poseimg = np.load(pose_gz)
     deepfeature = np.load(f'{root_wav}/deepfeature32/{asp}.npy')
     driving_latent = np.load(latent_path_driving[:-4]+'.npy', allow_pickle=True)
     he_driving = driving_latent[1]
+    
+    a2h_head = np.load(gzip.GzipFile(f'{root_wav}/a2h_head/{asp}.npy.gz', 'r'))
+    he_driving['a2h_head'] = a2h_head
     # gt frame number
     frames = glob.glob(f'{root_wav}/images_evp_25/cropped/*.jpg')
     num_frames = len(frames)
@@ -358,6 +368,8 @@ def test(ckpt, emotype, save_dir=" ", intensity=None):
                                 'pitch': torch.from_numpy(he_driving['pitch']).to(DEVICE).unsqueeze(0), 
                                 'roll': torch.from_numpy(he_driving['roll']).to(DEVICE).unsqueeze(0), 
                                 't': torch.from_numpy(he_driving['t']).to(DEVICE).unsqueeze(0), 
+                                'a2h_poseimg': torch.from_numpy(he_driving['a2h_poseimg']).to(DEVICE).unsqueeze(0),
+                                'a2h_head': torch.from_numpy(he_driving['a2h_head']).to(DEVICE).unsqueeze(0),
                                 }
                 x['intensity'] = intensity
                 
@@ -415,7 +427,7 @@ def test(ckpt, emotype, save_dir=" ", intensity=None):
                 device = exp.device
                 exp = torch.mm(exp, expU.t().to(device))
                 exp = exp + expmean.expand_as(exp).to(device)
-                exp = exp + emo_exps
+                exp = exp + emo_exps # E'=deltaE+E in paper
 
 
                 source_area = ConvexHull(kp_cano[0].cpu().numpy()).volume
@@ -457,7 +469,7 @@ def test(ckpt, emotype, save_dir=" ", intensity=None):
             os.remove(video_path)
 
 
-def test_one(ckpt, emotype, file: str, cropped=False, save_dir=" ", intensity=None):
+def test_one(ckpt, emotype, file: str, cropped=False, save_dir=" ", intensity=None, a2h=False):
     # with open("config/vox-transformer2.yaml") as f:
     with open("config/deepprompt_eam3d_st_tanh_304_3090_all.yaml") as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
@@ -487,7 +499,7 @@ def test_one(ckpt, emotype, file: str, cropped=False, save_dir=" ", intensity=No
         audio_path = all_wavs2[ind]
         # read in data
         audio_frames, poseimgs, deep_feature, source_img, he_source, he_driving, num_frames, y_trg, z_trg, latent_path_driving = prepare_test_data(
-            img_path, audio_path, config['model_params']['audio2kp_params'], emotype)
+            img_path, audio_path, config['model_params']['audio2kp_params'], emotype, a2h=a2h)
 
         with torch.no_grad():
             source_img = torch.from_numpy(
@@ -504,10 +516,11 @@ def test_one(ckpt, emotype, file: str, cropped=False, save_dir=" ", intensity=No
             x['pose'] = poseimgs.to(DEVICE)
             x['deep'] = deep_feature.to(DEVICE).unsqueeze(0)
             x['he_driving'] = {'yaw': torch.from_numpy(he_driving['yaw']).to(DEVICE).unsqueeze(0),
-                                'pitch': torch.from_numpy(he_driving['pitch']).to(DEVICE).unsqueeze(0),
-                                'roll': torch.from_numpy(he_driving['roll']).to(DEVICE).unsqueeze(0),
-                                't': torch.from_numpy(he_driving['t']).to(DEVICE).unsqueeze(0),
-                                }
+                               'pitch': torch.from_numpy(he_driving['pitch']).to(DEVICE).unsqueeze(0),
+                               'roll': torch.from_numpy(he_driving['roll']).to(DEVICE).unsqueeze(0),
+                               't': torch.from_numpy(he_driving['t']).to(DEVICE).unsqueeze(0),
+                               'a2h_head': torch.from_numpy(he_driving['a2h_head']).to(DEVICE).unsqueeze(0),
+                               }
             x['intensity'] = intensity
 
             # emotion prompt
@@ -550,10 +563,12 @@ def test_one(ckpt, emotype, file: str, cropped=False, save_dir=" ", intensity=No
                                         'pitch': x['he_driving']['pitch'][:, i*T:(i+1)*T, :],
                                         'roll': x['he_driving']['roll'][:, i*T:(i+1)*T, :],
                                         't': x['he_driving']['t'][:, i*T:(i+1)*T, :],
+                                        'a2h_head': x['he_driving']['a2h_head'][:, i*T:(i+1)*T, :],
                                         }
+
                     # {'yaw': yaw, 'pitch': pitch, 'roll': roll, 't': t, 'exp': exp}
                     he_driving_emo_xi, input_st_xi = audio2kptransformer(
-                        xi, kp_canonical, emoprompt=emoprompt, deepprompt=deepprompt, side=True)
+                        xi, kp_canonical, emoprompt=emoprompt, deepprompt=deepprompt, side=True, a2h=a2h)
                     emo_exp = sidetuning(
                         input_st_xi, emoprompt, deepprompt)
                     a2kp_exps.append(he_driving_emo_xi['emo'])
@@ -583,7 +598,7 @@ def test_one(ckpt, emotype, file: str, cropped=False, save_dir=" ", intensity=No
                                 'pitch': torch.from_numpy(he_driving['pitch']).to(DEVICE),
                                 'roll': torch.from_numpy(he_driving['roll']).to(DEVICE),
                                 't': torch.from_numpy(he_driving['t']).to(DEVICE),
-                                'exp': exp}
+                                'exp': exp, 'a2h_head': torch.from_numpy(he_driving['a2h_head']).to(DEVICE)}
             he_driving['exp'] = torch.from_numpy(
                 he_driving['exp']).to(DEVICE)
 
@@ -591,7 +606,7 @@ def test_one(ckpt, emotype, file: str, cropped=False, save_dir=" ", intensity=No
                 kp_canonical, he_source, False)
             mean_source = torch.mean(kp_source['value'], dim=1)[0]
             kp_driving = keypoint_transformation(
-                kp_canonical, he_new_driving, False)
+                kp_canonical, he_new_driving, False, a2h=a2h)
             mean_driving = torch.mean(torch.mean(
                 kp_driving['value'], dim=1), dim=0)
             kp_driving['value'] = kp_driving['value'] + \
@@ -611,8 +626,11 @@ def test_one(ckpt, emotype, file: str, cropped=False, save_dir=" ", intensity=No
             log_dir = save_dir
             os.makedirs(os.path.join(log_dir, "temp"), exist_ok=True)
 
-            f_name = os.path.basename(
-                img_path[:-4]) + "_" + emotype + "_" + os.path.basename(latent_path_driving)[:-4] + (f'_int{intensity:.3f}'.replace('.','') if intensity is not None else "") + ".mp4"
+            intensity_str = f'_int{intensity:.3f}'.replace(
+                '.', '') if intensity is not None else ""
+            name = os.path.basename(img_path[:-4])
+            a2h_str = '_a2h' if a2h else ''
+            f_name = name + "_" + emotype + "_" + os.path.basename(latent_path_driving)[:-4] + intensity_str + a2h_str + ".mp4"
             video_path = os.path.join(log_dir, "temp", f_name)
 
             imageio.mimsave(video_path, predictions_gen, fps=25.0)
@@ -628,9 +646,12 @@ if __name__ == '__main__':
     argparser.add_argument("--save_dir", type=str, default=" ", help="path of the output video")
     argparser.add_argument("--name", type=str, default="deepprompt_eam3d_all_final_313", help="path of the output video")
     argparser.add_argument("--emo", type=str, default="hap", help="emotion type ('ang',  'con',  'dis',  'fea',  'hap',  'neu',  'sad',  'sur')")
-    argparser.add_argument("--root_wav", type=str, default='./demo/video_processed/M003_neu_1_001', help="emotion type ('ang',  'con',  'dis',  'fea',  'hap',  'neu',  'sad',  'sur')")
+    argparser.add_argument("--root_wav", type=str, default='./demo/video_processed/M003_neu_1_001', help="directory containing driving .wav file(s)")
     argparser.add_argument("--src_img", type=str, default="", help="single file to process (just filename, directory is assumed to be ./demo/imgs)")
     argparser.add_argument("--intensity", type=float, default=None, help="Value in range [0,1]")
+    argparser.add_argument("--a2h", action='store_true',
+                        help="use audio2head to predict head pose")
+
     args = argparser.parse_args()
 
     root_wav=args.root_wav
@@ -639,7 +660,7 @@ if __name__ == '__main__':
         name = args.name
         print(name)
     if args.src_img:
-        test_one(f'./ckpt/{name}.pth.tar', args.emo, args.src_img, save_dir=f'./demo/output/{name}/', intensity=args.intensity)
+        test_one(f'./ckpt/{name}.pth.tar', args.emo, args.src_img, save_dir=f'./demo/output/{name}/', intensity=args.intensity, a2h=args.a2h)
     else:
         test(f'./ckpt/{name}.pth.tar', args.emo, save_dir=f'./demo/output/{name}/', intensity=args.intensity)
     

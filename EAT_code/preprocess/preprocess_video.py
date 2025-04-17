@@ -38,25 +38,34 @@ def main():
     print('=========== extract poseimg from latent =============')
     os.system('python generate_poseimg.py')
 
+    # ========= audio2head predictions ================
+    print('========= audio2head predictions ================')
+    os.system('python audio2pose_extractor.py')
+
     # ============== organize file for demo ===============
-    print('============== organize file for demo ===============')
-    for mp4 in allmp4s:
-        name = os.path.basename(mp4)[:-4]
-        filename = f'../demo/video_processed/{name}'
-        os.makedirs(f'{filename}/deepfeature32', exist_ok=True)
-        os.makedirs(f'{filename}/latent_evp_25', exist_ok=True)
-        os.makedirs(f'{filename}/poseimg', exist_ok=True)
-        os.makedirs(f'{filename}/images_evp_25/cropped', exist_ok=True)
-        # wav
-        os.system(f'cp ./video_fps25/{name}.wav {filename}')
-        # deepfeature32
-        os.system(f'cp ./deepfeature32/{name}.npy {filename}/deepfeature32/')
-        # latent
-        os.system(f'cp ./latents/{name}.npy {filename}/latent_evp_25/')
-        # poseimg
-        os.system(f'cp ./poseimg/{name}.npy.gz {filename}/poseimg/')
-        # images_evp_25
-        os.system(f'cp ./imgs/{name}/* {filename}/images_evp_25/cropped/')
+    # print('============== organize file for demo ===============')
+    # for mp4 in allmp4s:
+    #     name = os.path.basename(mp4)[:-4]
+    #     filename = f'../demo/video_processed/{name}'
+    #     os.makedirs(f'{filename}/deepfeature32', exist_ok=True)
+    #     os.makedirs(f'{filename}/latent_evp_25', exist_ok=True)
+    #     os.makedirs(f'{filename}/poseimg', exist_ok=True)
+    #     os.makedirs(f'{filename}/images_evp_25/cropped', exist_ok=True)
+    #     os.makedirs(f'{filename}/a2h_poseimg', exist_ok=True)
+    #     os.makedirs(f'{filename}/a2h_head', exist_ok=True)
+    #     # wav
+    #     os.system(f'cp ./video_fps25/{name}.wav {filename}')
+    #     # deepfeature32
+    #     os.system(f'cp ./deepfeature32/{name}.npy {filename}/deepfeature32/')
+    #     # latent
+    #     os.system(f'cp ./latents/{name}.npy {filename}/latent_evp_25/')
+    #     # poseimg
+    #     os.system(f'cp ./poseimg/{name}.npy.gz {filename}/poseimg/')
+    #     # images_evp_25
+    #     os.system(f'cp ./imgs/{name}/* {filename}/images_evp_25/cropped/')
+    #     os.system(f'cp ./imgs/{name}/0001.jpg {filename}/imgs/{name}.jpg')
+    #     os.system(f'cp ./a2h_poseimg/{name}.npy.gz {filename}/a2h_poseimg/')
+    #     os.system(f'cp ./a2h_head/{name}.npy.gz {filename}/a2h_head/')
 
 if __name__ == '__main__':
     main()

@@ -68,7 +68,7 @@ def extract_features(in_audios,
             metainfo_file_path,
             sep="\t",
             index_col=False,
-            dtype={"Id": np.int, "File": np.unicode, "Count": np.int})
+            dtype={"Id": int, "File": str, "Count": int})
         num_frames_info = train_df["Count"].values
         assert (len(num_frames_info) == len(in_audios))
 

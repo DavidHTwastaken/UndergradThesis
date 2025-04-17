@@ -759,23 +759,27 @@ class Audio2kpTransformerBBoxQDeepPrompt(nn.Module):
         F0_model.load_state_dict(params)
         self.f0_model = F0_model
 
-    def rotation_and_translation(self, headpose, bbs, bs):
+    def rotation_and_translation(self, headpose, bbs, bs, a2h=False):
         # print(headpose['roll'].shape, headpose['yaw'].shape,
         #       headpose['pitch'].shape, headpose['t'].shape)
-        yaw = headpose_pred_to_degree(headpose['yaw'].reshape(bbs*bs, -1))
-        pitch = headpose_pred_to_degree(headpose['pitch'].reshape(bbs*bs, -1))
-        roll = headpose_pred_to_degree(headpose['roll'].reshape(bbs*bs, -1))
+        if a2h:
+            head = headpose['a2h_head'].reshape(bbs*bs, -1)
+            yaw, pitch, roll, t = head[:, 0], head[:, 1], head[:, 2], head[:, 3:]
+        else:
+            yaw = headpose_pred_to_degree(headpose['yaw'].reshape(bbs*bs, -1))
+            pitch = headpose_pred_to_degree(headpose['pitch'].reshape(bbs*bs, -1))
+            roll = headpose_pred_to_degree(headpose['roll'].reshape(bbs*bs, -1))
+            t = headpose['t'].reshape(bbs*bs, -1)
         # print(f'yaw: {yaw}, pitch: {pitch}, roll: {roll}')
         yaw_2, pitch_2, roll_2, yaw_v, pitch_v, roll_v, rot_v = get_rotation_matrix(yaw, pitch, roll)
-        t = headpose['t'].reshape(bbs*bs, -1)
         hp = torch.cat([yaw.unsqueeze(1), pitch.unsqueeze(1), roll.unsqueeze(1), yaw_2, pitch_2, roll_2, yaw_v, pitch_v, roll_v, rot_v, t], dim=1)
         return hp
 
-    def forward(self, x, initial_kp = None, return_strg=False, emoprompt=None, deepprompt=None, hp=None, side=False):
+    def forward(self, x, initial_kp = None, return_strg=False, emoprompt=None, deepprompt=None, hp=None, side=False, a2h=False):
         bbs, bs, seqlen, _, _ = x['deep'].shape # deep shape is ([1, T, 11, 16, 29])
         # ph = x["pho"].reshape(bbs*bs*seqlen, 1)
         if hp is None:
-            hp = self.rotation_and_translation(x['he_driving'], bbs, bs)
+            hp = self.rotation_and_translation(x['he_driving'], bbs, bs, a2h=a2h)
         hp = self.hp_extractor(hp)
 
         pose_feature = x["pose"].reshape(bbs*bs*seqlen,1,64,64)

@@ -39,11 +39,11 @@ class EmotionDeepPrompt(nn.Module):
         self.mappingnet = MappingDeepNetwork(latent_dim=16, style_dim=128, num_domains=8, hidden_dim=512)
         self.style_dim=128
     
-    def forward(self,x):
+    def forward(self,x: dict):
         z_trg: torch.Tensor = x['z_trg'] # (1, 16)
         y_org: torch.Tensor = x['y_trg'] # (1, )
         bs = y_org.shape[0]
-        s_trg = self.mappingnet(z_trg, y_org, intensity=x['intensity']).reshape(bs, -1, 128) # (1, 7, 128)
+        s_trg = self.mappingnet(z_trg, y_org, intensity=x.get('intensity')).reshape(bs, -1, 128) # (1, 7, 128)
         # print(s_trg.shape)
         return s_trg[:,0,:], s_trg[:,1:,:]
 

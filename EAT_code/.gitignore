@@ -5,3 +5,5 @@ modules/Utils/*
 # __pycache__ folders
 __pycache__/*
 **/__pycache__/*
+
+lrw*

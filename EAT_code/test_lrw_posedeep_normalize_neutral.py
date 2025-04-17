@@ -98,7 +98,7 @@ def build_model(config, device_ids=[0]):
 
 
 
-def prepare_test_data(img_path, audio_path, opt):
+def prepare_test_data(img_path, audio_path, opt, a2h=False):
     sr,_ = wavfile.read(audio_path)
     temp_audio = audio_path
 
@@ -115,8 +115,6 @@ def prepare_test_data(img_path, audio_path, opt):
     
     # driving latent
     latent_path_driving = f'{root_lrw}/lrw_latent/{asp}.npy'
-    pose_gz = gzip.GzipFile(f'{root_lrw}/poseimg/{asp}.npy.gz', 'r')
-    poseimg = np.load(pose_gz)
     deepfeature = np.load(f'{root_lrw}/lrw_df32/{asp}.npy')
     driving_latent = np.load(latent_path_driving[:-4]+'.npy', allow_pickle=True)
     he_driving = driving_latent[1]
@@ -126,6 +124,15 @@ def prepare_test_data(img_path, audio_path, opt):
     z_trg = torch.randn(latent_dim)
 
     # gt frame number
+    if a2h:
+        poseimg = np.load(gzip.GzipFile(
+            f'{root_lrw}/lrw_a2h_poseimg/{asp}.npy.gz', 'r'))
+    else:
+        pose_gz = gzip.GzipFile(f'{root_lrw}/poseimg/{asp}.npy.gz', 'r')
+        poseimg = np.load(pose_gz)
+    a2h_head = np.load(gzip.GzipFile(f'{root_lrw}/lrw_a2h_head/{asp}.npy.gz', 'r'))
+    he_driving['a2h_head'] = a2h_head
+
     path = latent_path_driving[:-4].replace('latent', 'images')
     frames = glob.glob(path+'/*.jpg')
     num_frames = len(frames)
@@ -187,7 +194,7 @@ def load_ckpt(ckpt, kp_detector, generator, audio2kptransformer):
         kp_detector.load_state_dict(checkpoint['kp_detector'])
 
 gt_i = [5,6,7,8]
-def test_lrw(ckpt, part=0, save_dir=" "):
+def test_lrw(ckpt, part=0, save_dir=" ", a2h=False):
     with open("config/deepprompt_eam3d_st_tanh_304_3090_all.yaml") as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
     # temp_audio = audio_path
@@ -229,7 +236,7 @@ def test_lrw(ckpt, part=0, save_dir=" "):
         img_path = f'{root_lrw}/lrw_images/{name_a}/0001.jpg'
 
         # read in data
-        audio_frames, poseimgs, deep_feature, source_img, he_source, he_driving, num_frames, y_trg, z_trg, latent_path_driving = prepare_test_data(img_path, audio_path, config['model_params']['audio2kp_params'])
+        audio_frames, poseimgs, deep_feature, source_img, he_source, he_driving, num_frames, y_trg, z_trg, latent_path_driving = prepare_test_data(img_path, audio_path, config['model_params']['audio2kp_params'], a2h=a2h)
 
 
         with torch.no_grad():
@@ -248,6 +255,7 @@ def test_lrw(ckpt, part=0, save_dir=" "):
                             'pitch': torch.from_numpy(he_driving['pitch']).to(DEVICE).unsqueeze(0), 
                             'roll': torch.from_numpy(he_driving['roll']).to(DEVICE).unsqueeze(0), 
                             't': torch.from_numpy(he_driving['t']).to(DEVICE).unsqueeze(0), 
+                            'a2h_head': torch.from_numpy(he_driving['a2h_head']).to(DEVICE).unsqueeze(0),
                             }
             ### emotion prompt
             emoprompt, deepprompt = emotionprompt(x)
@@ -270,6 +278,7 @@ def test_lrw(ckpt, part=0, save_dir=" "):
                             'pitch': torch.from_numpy(he_driving['pitch']).to(DEVICE), 
                             'roll': torch.from_numpy(he_driving['roll']).to(DEVICE), 
                             't': torch.from_numpy(he_driving['t']).to(DEVICE), 
+                            'a2h_head': torch.from_numpy(he_driving['a2h_head']).to(DEVICE),
                             #   'exp': torch.from_numpy(he_driving['exp']).to(DEVICE)}
                             'exp': exp}
             he_driving['exp'] = torch.from_numpy(he_driving['exp']).to(DEVICE)
@@ -283,6 +292,7 @@ def test_lrw(ckpt, part=0, save_dir=" "):
                 loss_y.append(torch.abs(new_exp[:, i, 1] - gt_exp[:, i, 1]).mean().cpu().numpy())
             loss_latents.append(loss_latent.cpu().numpy())
             loss_pca_emos.append(loss_pca_emo.cpu().numpy())
+            continue # only calculating loss
             # print(kp_canonical['value'].shape)
             kp_source = keypoint_transformation(kp_canonical, he_source, False)
             kp_driving = keypoint_transformation(kp_canonical, he_new_driving, False)
@@ -325,9 +335,9 @@ def test_lrw(ckpt, part=0, save_dir=" "):
         # cmd = r'ffmpeg -loglevel error -y -i "%s" -i "%s" -vcodec copy "%s"' % (video_path, audio_path, save_video)
         # os.system(cmd)
         # os.remove(video_path)
-    print(loss_latents)
-    print(loss_pca_emos)
-    print(loss_y)
+    # print(loss_latents)
+    # print(loss_pca_emos)
+    # print(loss_y)
     print('mean loss_latents', np.mean(loss_latents))
     print('mean loss_pca_emos', np.mean(loss_pca_emos))
     print('mean loss_y ', np.mean(loss_y))
@@ -347,6 +357,7 @@ if __name__ == '__main__':
     argparser.add_argument("--name", type=str, default=" ", help="path of the output video")
     argparser.add_argument("--mode", type=int, default=0, help="test mode 0: a ckpt 1: a ckpt file")
     argparser.add_argument("--root_lrw", type=str, default="lrw", help="path of lrw")
+    argparser.add_argument("--a2h", action='store_true', help="use a2h head")
     args = argparser.parse_args()
 
     # name = 'vt2mel25_2_vox_head_587'
@@ -364,7 +375,7 @@ if __name__ == '__main__':
             save_dir = args.save_dir
         else:
             save_dir = f'./result_lrw/{name}_lrw_norm/'
-        test_lrw(f'./ckpt/{name}.pth.tar', args.part, save_dir=save_dir)
+        test_lrw(f'./ckpt/{name}.pth.tar', args.part, save_dir=save_dir, a2h=args.a2h)
     elif args.mode == 1:
         ckpt_paths = glob.glob(f'../ost/output/{name}/*.pth.tar')
         ckpt_paths.sort()

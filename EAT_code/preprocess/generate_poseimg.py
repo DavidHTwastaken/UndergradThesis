@@ -28,6 +28,7 @@ def headpose_pred_to_degree(pred):
     return degree
 
 def get_rotation_matrix(yaw, pitch, roll):
+    print(yaw.shape)
     yaw = yaw / 180 * 3.14
     pitch = pitch / 180 * 3.14
     roll = roll / 180 * 3.14
@@ -102,16 +103,20 @@ def draw_annotation_box( image, rotation_vector, translation_vector, color=(255,
 
 def get_pose_img(he_driving):
     yaw = headpose_pred_to_degree(he_driving['yaw'])
+    # print(yaw.shape)
     pitch = headpose_pred_to_degree(he_driving['pitch'])
     roll = headpose_pred_to_degree(he_driving['roll'])
     rot = get_rotation_matrix(yaw, pitch, roll).cpu().numpy().astype(np.double)
+    # print(rot)
     t = he_driving['t'].astype(np.double)
+    # print(t)
     poseimgs = []
     for i in range(rot.shape[0]):
         ri = rot[i]
         ti = t[i]
         img = np.zeros([256, 256])
         draw_annotation_box(img, ri, ti)
+        print(img)
         # show image to user
         # cv2.imshow('image', img)
         # cv2.waitKey(0)

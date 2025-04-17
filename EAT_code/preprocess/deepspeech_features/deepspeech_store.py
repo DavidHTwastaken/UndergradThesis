@@ -13,7 +13,7 @@ import hashlib
 deepspeech_features_repo_url = 'https://github.com/osmr/deepspeech_features'
 
 
-def get_deepspeech_model_file(local_model_store_dir_path=os.path.join("~", ".tensorflow", "models")):
+def get_deepspeech_model_file(local_model_store_dir_path="models"):
     """
     Return location for the pretrained on local file system. This function will download from online model zoo when
     model cannot be found or has mismatch. The root directory will be created if it doesn't exist.

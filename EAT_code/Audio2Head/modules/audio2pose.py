@@ -30,9 +30,12 @@ class audio2poseLSTM(nn.Module):
         res = torch.cat(result,dim=1)
         return res
 
-def get_pose_from_audio(img,audio,model_path):
+
+def get_pose_from_audio(img, audio, model_path="./checkpoints/audio2head.pth.tar"):
     num_frame = len(audio) // 4
     # Changed minv and maxv to match the values in EAT_code
+    # minv = np.array([-0.639, -0.501, -0.47, -102.6, -32.5, 184.6], dtype=np.float32)
+    # maxv = np.array([0.411, 0.547, 0.433, 159.1, 116.5, 376.5], dtype=np.float32)
     minv = np.array([0, 0, 0, -1, -1, -1], dtype=np.float32)
     maxv = np.array([65, 65, 65, 1, 1, 1], dtype=np.float32)
 
@@ -63,3 +66,40 @@ def get_pose_from_audio(img,audio,model_path):
     poses = (poses+1)/2*(maxv-minv)+minv
     rot,trans =  poses[:,:3].copy(),poses[:,3:].copy()
     return rot,trans
+
+def get_pose_from_audio_raw(img, audio, model_path="./checkpoints/audio2head.pth.tar"):
+    num_frame = len(audio) // 4
+    # Changed minv and maxv to match the values in EAT_code
+    # minv = np.array([-0.639, -0.501, -0.47, -102.6, -32.5, 184.6], dtype=np.float32)
+    # maxv = np.array([0.411, 0.547, 0.433, 159.1, 116.5, 376.5], dtype=np.float32)
+    # minv = np.array([0, 0, 0, -1, -1, -1], dtype=np.float32)
+    # maxv = np.array([65, 65, 65, 1, 1, 1], dtype=np.float32)
+
+    generator = audio2poseLSTM().to(DEVICE)
+
+    ckpt_para = torch.load(model_path, map_location=DEVICE)
+
+    generator.load_state_dict(ckpt_para["audio2pose"])
+    generator.eval()
+
+    audio_seq = []
+    for i in range(num_frame):
+        audio_seq.append(audio[i*4:i*4+4])
+
+    audio = torch.from_numpy(
+        np.array(audio_seq, dtype=np.float32)).unsqueeze(0).to(DEVICE)
+
+    x = {}
+    x["img"] = img
+    x["audio"] = audio
+    poses = generator(x)
+
+    # print('audio2poseLSTM output: ', poses.shape)
+    poses = poses.cpu().data.numpy()[0]
+
+    # Simple min-max scaling
+    # poses = (poses+1)/2*(maxv-minv)+minv
+    # print('rotations: ',poses[:,:3])
+    # poses = (poses+1)/2*(maxv-minv)+minv
+    rot, trans = poses[:, :3].copy(), poses[:, 3:].copy()
+    return rot, trans

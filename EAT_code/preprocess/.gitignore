@@ -7,3 +7,7 @@ lmk_fps25/*
 poseimg/*
 video_fps25/*
 raw_videos/*
+a2h_head/*
+a2h_poseimg/*
+deepspeech_features/models/*
+temp.wav

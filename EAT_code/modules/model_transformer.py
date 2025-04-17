@@ -224,15 +224,20 @@ def get_rotation_matrix(yaw, pitch, roll):
 
     return rot_mat
 
-def keypoint_transformation(kp_canonical, he, estimate_jacobian=True, dkc=None):
+def keypoint_transformation(kp_canonical, he, estimate_jacobian=True, dkc=None, a2h=False):
+    if a2h:
+        head = he['a2h_head']
+        yaw, pitch, roll, t = head[:, 0], head[:, 1], head[:, 2], head[:, 3:]
+    else:
+        yaw, pitch, roll = he['yaw'], he['pitch'], he['roll']
+        yaw = headpose_pred_to_degree(yaw)
+        pitch = headpose_pred_to_degree(pitch)
+        roll = headpose_pred_to_degree(roll)
+        t = he['t']
+    exp = he['exp']
     kp = kp_canonical['value']    # (bs, k, 3)
-    yaw, pitch, roll = he['yaw'], he['pitch'], he['roll']
-    t, exp = he['t'], he['exp']
     # print(yaw.shape) # len 66
 
-    yaw = headpose_pred_to_degree(yaw)
-    pitch = headpose_pred_to_degree(pitch)
-    roll = headpose_pred_to_degree(roll)
 
     rot_mat = get_rotation_matrix(yaw, pitch, roll)    # (bs, 3, 3)
     

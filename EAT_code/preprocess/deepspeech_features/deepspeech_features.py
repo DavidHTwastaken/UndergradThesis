@@ -104,6 +104,8 @@ def prepare_deepspeech_net(deepspeech_pb_path):
 
     graph = tf.compat.v1.get_default_graph()
     tf.import_graph_def(graph_def, name="deepspeech")
+    print([op.name for op in graph.get_operations()])
+
     logits_ph = graph.get_tensor_by_name("deepspeech/logits:0")
     input_node_ph = graph.get_tensor_by_name("deepspeech/input_node:0")
     input_lengths_ph = graph.get_tensor_by_name("deepspeech/input_lengths:0")
